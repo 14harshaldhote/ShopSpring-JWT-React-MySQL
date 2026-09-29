@@ -1,0 +1,3 @@
+User-agent: *
+# honeytoken, see README [OWASP A09:2025]
+Disallow: /api/internal/backup
