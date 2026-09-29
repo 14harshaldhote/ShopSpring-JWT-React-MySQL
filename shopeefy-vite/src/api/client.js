@@ -77,6 +77,22 @@ async function postRefresh() {
   return startSession(data);
 }
 
+/** How long to wait before retrying a failed refresh once, or null when a retry can't help. */
+function refreshRetryDelay(error) {
+  switch (error.response?.status) {
+    // 409: another tab refreshed with the same cookie a moment ago. The browser already holds
+    // the rotated cookie, so a retry shortly after succeeds.
+    case 409:
+      return 300;
+    // 429: refreshes are rate limited, but the cookie is still valid, so this is not a sign-out.
+    // Wait as long as the server asks, up to 5 seconds.
+    case 429:
+      return Math.min(Number(error.response.headers['retry-after']) || 1, 5) * 1000;
+    default:
+      return null;
+  }
+}
+
 let refreshInFlight = null;
 
 /**
@@ -89,13 +105,12 @@ export function refreshSession() {
     try {
       return await postRefresh();
     } catch (error) {
-      // 409: another tab refreshed with the same cookie a moment ago. The browser already holds
-      // the rotated cookie, so wait briefly and try once more.
-      if (error.response?.status === 409) {
-        await sleep(300);
-        return postRefresh();
+      const delay = refreshRetryDelay(error);
+      if (delay === null) {
+        throw error;
       }
-      throw error;
+      await sleep(delay);
+      return postRefresh();
     }
   })().finally(() => {
     refreshInFlight = null;

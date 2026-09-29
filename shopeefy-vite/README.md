@@ -20,6 +20,7 @@ npm run preview   # serves dist/ with the production Content-Security-Policy
 | Page reload | the app calls `POST /auth/refresh` once at start-up to get a new access token from the cookie | `A07` |
 | Expired or revoked token | the first `401` triggers one shared refresh, then the request is replayed once; a failed refresh signs out locally | `A07` |
 | Two tabs refreshing at once | the server answers the loser with `409`; the app retries with the cookie the winner already received | `A07` |
+| Throttled refresh | a `429` on refresh is not a sign-out: the app waits for `Retry-After` (up to 5 s) and tries once more | `A07` |
 | CSRF | every request carries `X-Requested-With: XMLHttpRequest`, which the API requires on cookie endpoints | `A01` |
 | OAuth2 | `/oauth2/callback` receives no token in its URL; it calls `/auth/refresh` to pick up the session the API created | `A07` |
 | XSS | React escapes all text (reviews included); no `dangerouslySetInnerHTML`; the production CSP has no `'unsafe-inline'` or `'unsafe-eval'` in `script-src` | `A05` |

@@ -243,6 +243,16 @@ if DEVIDP_PASSWORD:
           s == 200 and oauth["user"]["email"] == DEVIDP_EMAIL and oauth["user"]["authProvider"] == "DEVIDP",
           (s, oauth))
 
+# ---- Rate limits: a user browsing fast is never throttled, a credential-stuffing burst is
+statuses = [Client().req("GET", "/auth/providers")[0] for _ in range(25)]
+statuses += [c.req("POST", "/auth/refresh")[0] for _ in range(10)]
+check("A07", "fast browsing (25 page loads, 10 refreshes) is never throttled",
+      all(s == 200 for s in statuses), statuses)
+statuses = [Client().req("POST", "/auth/login", {"email": f"stuffing{i}@example.com", "password": f"guess {i} pass"})[0]
+            for i in range(25)]
+check("A07", "a credential-stuffing burst from one IP is throttled",
+      429 in statuses and 200 not in statuses, statuses)
+
 # ---- Honeytoken: the last check, because it blocks this IP for 15 minutes
 if not os.environ.get("SKIP_HONEYPOT"):
     s, _, _ = Client().req("GET", "/.env")

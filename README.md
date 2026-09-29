@@ -325,7 +325,11 @@ where a client can fire twice the limit, and the response says exactly when to r
   reset its buckets `A01`.
 * Buckets live in a size-bounded Caffeine cache, so random keys can't exhaust memory. For several
   API instances, Bucket4j's Redis or JDBC proxy manager drops in behind the same interface.
-* nginx adds a coarse edge limit on `/auth` (30 requests per minute, burst 20) in front of it.
+* nginx adds a coarse edge limit (30 requests per minute, burst 20) on the endpoints where a
+  password or code can be guessed: sign-in, sign-up, one-time codes and password reset. Session
+  refresh is left to the API's `refresh` bucket, because a browser refreshes on every page load
+  and an edge limit there would sign out a user who opens a few tabs. The browser end-to-end test
+  caught exactly that, and the web app now waits out a `429` on refresh instead of signing out.
 
 ### 5. Access control `A01`
 
