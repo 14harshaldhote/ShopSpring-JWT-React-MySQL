@@ -1,0 +1,17 @@
+# Production profile. StartupSecurityValidator refuses to start when a required secret is
+# missing or a dev default is still in place.                                       [OWASP A02:2025]
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+logging:
+  structured:
+    format:
+      console: ecs                     # JSON logs: values are encoded, so CR/LF can't forge entries [OWASP A09:2025]
+
+app:
+  seed:
+    products: ${SEED_PRODUCTS:false}

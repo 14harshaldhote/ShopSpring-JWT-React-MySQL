@@ -1,0 +1,13 @@
+-- Least-privilege database accounts.                                         [OWASP A05:2025, A02:2025]
+--   shopspring_migrator: owns the schema; used only by Flyway at start-up.
+--   shopspring_app:      the running application. Data only (SELECT/INSERT/UPDATE/DELETE):
+--                        no DROP, ALTER, CREATE, TRIGGER, FILE or GRANT, so even a successful
+--                        SQL injection could not drop tables, read server files or disable the
+--                        append-only audit trigger.
+-- Passwords come from the environment (see docker-compose.yml); the placeholders below are
+-- replaced by 00-render.sh before MySQL runs this file.
+CREATE USER IF NOT EXISTS 'shopspring_migrator'@'%' IDENTIFIED BY '__MIGRATOR_PASSWORD__';
+CREATE USER IF NOT EXISTS 'shopspring_app'@'%' IDENTIFIED BY '__APP_PASSWORD__';
+GRANT ALL PRIVILEGES ON shopspring.* TO 'shopspring_migrator'@'%';
+GRANT SELECT, INSERT, UPDATE, DELETE ON shopspring.* TO 'shopspring_app'@'%';
+FLUSH PRIVILEGES;
