@@ -22,6 +22,10 @@
         <!-- Boot 4.1.1 ships Tomcat 11.0.24, which has three critical CVEs (CVE-2026-65182, -65905, -68525)
              that the Trivy gate in CI caught. Pinned to the fixed release until Boot catches up. [OWASP A03:2025] -->
         <tomcat.version>11.0.26</tomcat.version>
+        <!-- Boot 4.1.1 also ships Jackson 3.1.5 and 2.21.5, open to CVE-2026-68497 (CPU denial of service
+             through unbounded number parsing). Pinned to the fixed patch releases.     [OWASP A03:2025, A10:2025] -->
+        <jackson-bom.version>3.1.7</jackson-bom.version>
+        <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
         <bucket4j.version>8.20.0</bucket4j.version>
         <springdoc.version>3.1.1</springdoc.version>
         <testcontainers.version>2.0.5</testcontainers.version>

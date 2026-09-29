@@ -60,7 +60,8 @@ public class SecurityConfig {
                 .securityContext(c -> c.securityContextRepository(new RequestAttributeSecurityContextRepository()))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .requestCache(c -> c.disable())
-                .csrf(c -> c.disable())   // GET redirects only; the OAuth2 "state" parameter is the CSRF token
+                // Spring's CSRF filter stays on. This chain only serves GET redirects, which it never
+                // blocks, and the OAuth2 "state" parameter protects the callback.  [OWASP A01:2025]
                 .exceptionHandling(e -> e.authenticationEntryPoint(restHandlers))
                 .headers(h -> h
                         .contentSecurityPolicy(csp -> csp.policyDirectives("default-src 'none'; frame-ancestors 'none'"))
@@ -97,7 +98,6 @@ public class SecurityConfig {
         http.securityMatcher("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .csrf(c -> c.disable())
                 .headers(h -> h
                         .contentSecurityPolicy(csp -> csp.policyDirectives(
                                 "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'"))
@@ -127,7 +127,10 @@ public class SecurityConfig {
                 .exceptionHandling(e -> e.authenticationEntryPoint(restHandlers).accessDeniedHandler(restHandlers))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // Bearer tokens aren't sent automatically by browsers, so the API itself needs no CSRF
-                // token. The one cookie (refresh) is protected by SameSite=Strict + CookieRequestGuardFilter.
+                // token. The one cookie (refresh, Path=/auth) is protected by SameSite=Strict plus
+                // CookieRequestGuardFilter (required custom header, Origin and Fetch Metadata checks), the
+                // defences the OWASP CSRF Cheat Sheet lists for APIs; SecurityConfigurationTest proves it.
+                // CodeQL's java/spring-disabled-csrf-protection flags this line by design.  [OWASP A01:2025]
                 .csrf(c -> c.disable())
                 .requestCache(c -> c.disable())
                 .cors(c -> { })

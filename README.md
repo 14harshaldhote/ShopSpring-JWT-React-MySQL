@@ -447,8 +447,16 @@ flowchart LR
   dependency trees, on secrets in the repository, and on Dockerfile misconfigurations. It scans
   the built images too. During this rebuild it caught three critical CVEs in the Tomcat bundled
   with Spring Boot 4.1.1 (CVE-2026-65182, CVE-2026-65905, CVE-2026-68525); Tomcat is pinned to the
-  fixed 11.0.26 in both `pom.xml` files until Boot ships it.
+  fixed 11.0.26 in both `pom.xml` files until Boot ships it. On the first CI run of this PR it
+  caught a newly listed Jackson CVE (CVE-2026-68497, CPU denial of service through
+  unbounded number parsing), so Jackson is pinned to the fixed 3.1.7 and 2.21.7 the same way.
 * **CodeQL** with the `security-extended` queries on Java and JavaScript, on every push and weekly.
+  Its first run flagged CSRF protection switched off in three filter chains. Two of them only serve
+  GET redirects and docs, so Spring's CSRF filter is back on there. The third is the bearer-token
+  API, where CSRF can't apply; its one cookie has its own CSRF defences (section 5), proven by
+  `SecurityConfigurationTest`. CodeQL also flags SHA-1 in the breached-password check: the Pwned
+  Passwords API is keyed by SHA-1, and it is a lookup key, not password storage (that is Argon2id).
+  Those two are triaged as won't-fix with this reasoning in the code, not excluded from the scan.
 * **CycloneDX SBOMs** for the API and the web app are attached to every CI run.
 * **Dependabot** keeps Maven, npm, Docker base images and the pinned action SHAs up to date; each
   update has to pass the whole gate.

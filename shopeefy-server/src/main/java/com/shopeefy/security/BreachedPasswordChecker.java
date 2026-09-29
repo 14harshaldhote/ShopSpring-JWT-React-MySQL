@@ -68,6 +68,12 @@ public class BreachedPasswordChecker {
         }
     }
 
+    /**
+     * SHA-1 because the Pwned Passwords range API is keyed by it (k-anonymity: only the first 5 hex
+     * characters leave the server). It is a lookup key into a public breach corpus, not a way of
+     * protecting data; passwords are stored with Argon2id ({@link PasswordConfig}). CodeQL's
+     * java/potentially-weak-cryptographic-algorithm flags this by design.   [OWASP A04:2025]
+     */
     private static String sha1Hex(String value) {
         try {
             return HexFormat.of().withUpperCase()
