@@ -1,0 +1,16 @@
+# Secrets never go into git.                                                 [OWASP A02:2025, A04:2025]
+.env
+*.pem
+*.p12
+*.jks
+
+# Build output
+target/
+dist/
+node_modules/
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+*.iml

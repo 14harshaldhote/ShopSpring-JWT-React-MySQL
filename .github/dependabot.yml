@@ -1,0 +1,21 @@
+# Keeps dependencies, base images and pinned action SHAs current, so security fixes arrive as
+# reviewed pull requests that must pass the full CI gate.                     [OWASP A03:2025]
+version: 2
+updates:
+  - package-ecosystem: maven
+    directories: [/shopeefy-server, /dev-idp]
+    schedule: { interval: weekly }
+    groups:
+      spring: { patterns: ["org.springframework*"] }
+  - package-ecosystem: npm
+    directory: /shopeefy-vite
+    schedule: { interval: weekly }
+    groups:
+      react: { patterns: ["react", "react-dom", "@types/react*"] }
+      mui: { patterns: ["@mui/*", "@emotion/*"] }
+  - package-ecosystem: docker
+    directories: [/shopeefy-server, /dev-idp, /shopeefy-vite]
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

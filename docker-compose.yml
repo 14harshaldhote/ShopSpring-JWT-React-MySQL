@@ -1,0 +1,117 @@
+# Local stack: MySQL, Mailpit (catches OTP and alert emails), the API, a local OpenID Connect
+# provider for the OAuth2 demo, and nginx serving the web app and proxying the API.
+# Secrets come from .env (create it with ./scripts/init-env.sh); none are committed.
+# Everything is bound to 127.0.0.1 only.
+name: shopspring
+
+x-hardening: &hardening
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+
+services:
+  mysql:
+    image: ${REGISTRY:-docker.io/library}/mysql:8.4
+    command: ["--log-bin-trust-function-creators=1"]   # lets the migration create the append-only audit triggers
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?run ./scripts/init-env.sh}
+      MYSQL_DATABASE: shopspring
+      DB_PASSWORD: ${DB_PASSWORD:?run ./scripts/init-env.sh}
+      DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD:?run ./scripts/init-env.sh}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [backend]
+
+  mailpit:
+    image: ${MAILPIT_IMAGE:-axllent/mailpit:latest}
+    ports: ["127.0.0.1:8025:8025"]
+    networks: [backend]
+
+  api:
+    build:
+      context: ./shopeefy-server
+      args: { REGISTRY: "${REGISTRY:-docker.io/library}" }
+    <<: *hardening
+    environment:
+      DB_HOST: mysql
+      DB_USERNAME: shopspring_app
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_MIGRATION_USERNAME: shopspring_migrator
+      DB_MIGRATION_PASSWORD: ${DB_MIGRATION_PASSWORD}
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      FRONTEND_URL: http://localhost:8088
+      ALLOWED_ORIGINS: http://localhost:8088
+      JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY:?run ./scripts/init-env.sh}
+      OTP_PEPPER: ${OTP_PEPPER:?run ./scripts/init-env.sh}
+      MOCK_PAYMENT_SECRET: ${MOCK_PAYMENT_SECRET:?run ./scripts/init-env.sh}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      SECURITY_ALERT_EMAIL: ${SECURITY_ALERT_EMAIL}
+      PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      DEVIDP_CLIENT_ID: ${DEVIDP_CLIENT_ID}
+      DEVIDP_CLIENT_SECRET: ${DEVIDP_CLIENT_SECRET}
+      DEVIDP_BROWSER_URL: http://localhost:9000
+      DEVIDP_INTERNAL_URL: http://devidp:9000
+    healthcheck:   # the JRE image has no curl, so bash's /dev/tcp asks the management port directly
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8081 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 20s
+    depends_on:
+      mysql: { condition: service_healthy }
+      mailpit: { condition: service_started }
+      devidp: { condition: service_healthy }
+    networks: [backend]
+
+  devidp:
+    build:
+      context: ./dev-idp
+      args: { REGISTRY: "${REGISTRY:-docker.io/library}" }
+    <<: *hardening
+    environment:
+      DEVIDP_ISSUER: http://localhost:9000
+      DEVIDP_CLIENT_ID: ${DEVIDP_CLIENT_ID}
+      DEVIDP_CLIENT_SECRET: ${DEVIDP_CLIENT_SECRET}
+      DEVIDP_REDIRECT_URI: http://localhost:8088/login/oauth2/code/devidp
+      DEVIDP_USER_EMAIL: ${DEVIDP_USER_EMAIL:-demo@shopspring.dev}
+      DEVIDP_USER_PASSWORD: ${DEVIDP_USER_PASSWORD}
+    ports: ["127.0.0.1:9000:9000"]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /.well-known/openid-configuration HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q issuer <&3"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    networks: [backend]
+
+  web:
+    build:
+      context: ./shopeefy-vite
+      args: { REGISTRY: "${REGISTRY:-docker.io/library}" }
+    <<: *hardening
+    ports: ["127.0.0.1:8088:8080"]
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [backend]
+
+networks:
+  backend: {}
+
+volumes:
+  mysql-data: {}
