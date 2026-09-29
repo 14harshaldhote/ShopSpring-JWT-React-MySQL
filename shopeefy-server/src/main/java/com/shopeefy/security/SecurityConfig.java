@@ -126,12 +126,8 @@ public class SecurityConfig {
                         .accessDeniedHandler(restHandlers))
                 .exceptionHandling(e -> e.authenticationEntryPoint(restHandlers).accessDeniedHandler(restHandlers))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                // Bearer tokens aren't sent automatically by browsers, so the API itself needs no CSRF
-                // token. The one cookie (refresh, Path=/auth) is protected by SameSite=Strict plus
-                // CookieRequestGuardFilter (required custom header, Origin and Fetch Metadata checks), the
-                // defences the OWASP CSRF Cheat Sheet lists for APIs; SecurityConfigurationTest proves it.
-                // CodeQL's java/spring-disabled-csrf-protection flags this line by design.  [OWASP A01:2025]
-                .csrf(c -> c.disable())
+                // Keep CSRF enabled by default; only disable it for non-browser webhook callbacks.
+                .csrf(c -> c.ignoringRequestMatchers("/api/payments/webhook"))
                 .requestCache(c -> c.disable())
                 .cors(c -> { })
                 .headers(h -> h
