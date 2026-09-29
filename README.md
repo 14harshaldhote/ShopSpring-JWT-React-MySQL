@@ -66,7 +66,7 @@ the client and emails a CRITICAL alert.
 | **Payment integrity**: server-side amounts, HMAC signature check, server-to-server confirmation, idempotent | A forged, replayed or swapped payment can't mark an order paid | `A08` `A06` |
 | **Race-safe stock and lockout counters** (conditional `UPDATE`, row locks) | Two buyers can't both get the last item; parallel password guesses are all counted | `A06` `A07` |
 | **Least-privilege database accounts** | Even a successful SQL injection couldn't drop tables or disable the audit trigger | `A05` `A02` |
-| **64 attack tests on a real MySQL** plus an end-to-end attack run against the Docker stack in CI | Every claim above is executable | all |
+| **68 attack tests on a real MySQL** plus an end-to-end attack run against the Docker stack in CI | Every claim above is executable | all |
 | **Supply chain gate**: SHA-pinned actions, Trivy, CodeQL, CycloneDX SBOMs, Dependabot | The gate already caught and blocked 3 critical Tomcat CVEs during this rebuild | `A03` |
 
 ## Tech stack
@@ -110,7 +110,7 @@ flowchart TB
 
     subgraph API["Spring Boot 4 API · Java 25"]
         direction LR
-        F1["① RequestSizeLimitFilter<br/>64 KB · A10"] --> F2["② RateLimitFilter<br/>token buckets · A07"] --> F3["③ CookieRequestGuard<br/>CSRF · A01"] --> F4["④ Spring Security<br/>RS256 JWT + session check · A07<br/>OAuth2 login + PKCE · A07"]
+        F1["① RequestSizeLimitFilter<br/>64 KB · A10"] --> F2["② RateLimitFilter<br/>token buckets · A07"] --> F3["③ CookieRequestGuard<br/>CSRF · A01"] --> F4["④ Spring Security<br/>CSRF filter · A01<br/>RS256 JWT + session check · A07<br/>OAuth2 login + PKCE · A07"]
     end
 
     SVC["Controllers and services<br/>ownership checks · A01 · state machine and limits · A06 · bind parameters only · A05"]
@@ -147,7 +147,7 @@ request is refused before any JSON parsing, JWT verification or password hashing
 | -120 | `RequestSizeLimitFilter`: bodies over 64 KB, including chunked bodies with no length | 413 | `A10` |
 | -110 | `RateLimitFilter`: `auth`, `refresh` and `api` token buckets per client | 429 + `Retry-After` | `A07` |
 | -105 | `CookieRequestGuardFilter`: cross-site calls to the cookie endpoints | 403 | `A01` |
-| Security | Honeytoken block list, JWT verification, session revocation, role rules | 401 / 403 | `A07` `A01` `A09` |
+| Security | Honeytoken block list, CSRF filter, JWT verification, session revocation, role rules | 401 / 403 | `A07` `A01` `A09` |
 
 ## The security system in detail
 
@@ -203,7 +203,9 @@ sequenceDiagram
 * **Passwords** follow NIST SP 800-63B and the Authentication Cheat Sheet: 10 to 128 characters,
   any characters, NFKC-normalised, no composition rules; common passwords, passwords built from
   the user's own name or email, and passwords found in breaches (HaveIBeenPwned range API with
-  k-anonymity: only 5 hex characters of a SHA-1 prefix leave the server) are refused.
+  k-anonymity: only 5 hex characters of a SHA-1 prefix leave the server, and answers are padded)
+  are refused. The lookup is Spring Security's `HaveIBeenPwnedRestApiPasswordChecker`, with
+  timeouts; `BreachedPasswordCheckerTest` checks what leaves the server.
 * **Hashing**: Argon2id with m=19 MiB, t=2, p=1 (the Password Storage Cheat Sheet minimum;
   Spring's default of 16 MiB is below it). Older bcrypt or weaker Argon2 hashes are re-hashed
   on the next successful login `A04`.
@@ -344,6 +346,11 @@ where a client can fire twice the limit, and the response says exactly when to r
   `SameSite=Strict`, a custom `X-Requested-With` header (which forms can't send and cross-origin
   scripts can't send without passing CORS), and a same-site `Sec-Fetch-Site` / `Origin`. Any one
   of the three stops a cross-site request.
+* **CSRF on the rest of the API** is Spring Security's own CSRF filter. A state-changing request
+  must carry a bearer token (which a browser never adds by itself) or the same custom header, or
+  it gets `403`. The API issues no CSRF token, so this stores nothing and never creates a session
+  (`ApiCsrfProtection`). Only the payment webhook (signed with HMAC), the mock payment page and the
+  honeytokens are exempt.
 * CORS allows only the configured origins; a foreign origin gets no `Access-Control-Allow-Origin`.
 
 ### 6. Injection `A05`
@@ -451,12 +458,12 @@ flowchart LR
   caught a newly listed Jackson CVE (CVE-2026-68497, CPU denial of service through
   unbounded number parsing), so Jackson is pinned to the fixed 3.1.7 and 2.21.7 the same way.
 * **CodeQL** with the `security-extended` queries on Java and JavaScript, on every push and weekly.
-  Its first run flagged CSRF protection switched off in three filter chains. Two of them only serve
-  GET redirects and docs, so Spring's CSRF filter is back on there. The third is the bearer-token
-  API, where CSRF can't apply; its one cookie has its own CSRF defences (section 5), proven by
-  `SecurityConfigurationTest`. CodeQL also flags SHA-1 in the breached-password check: the Pwned
-  Passwords API is keyed by SHA-1, and it is a lookup key, not password storage (that is Argon2id).
-  Those two are triaged as won't-fix with this reasoning in the code, not excluded from the scan.
+  Its first run flagged CSRF protection switched off in three filter chains. Spring's CSRF filter
+  is now on in all three. On the bearer-token API it asks for a bearer token or the custom header
+  (section 5), not a synchronizer token: a suggested one-line fix that required those tokens made
+  every sign-in fail with `403`, and the attack tests stopped it in CI. CodeQL also flagged our own
+  SHA-1 code in the breached-password check. SHA-1 is only the Pwned Passwords lookup key (passwords
+  are stored with Argon2id), and the check now uses Spring Security's built-in client for it.
 * **CycloneDX SBOMs** for the API and the web app are attached to every CI run.
 * **Dependabot** keeps Maven, npm, Docker base images and the pinned action SHAs up to date; each
   update has to pass the whole gate.
@@ -465,7 +472,7 @@ flowchart LR
 
 | # | Category | What ShopSpring does | Main code | Proven by |
 |---|---|---|---|---|
-| A01 | Broken Access Control | Deny by default, role rules, owner-scoped queries (IDOR → 404), record DTOs against mass assignment, CSRF guard, strict CORS, IP from trusted proxy only | `SecurityConfig`, `OrderRepository`, `CookieRequestGuardFilter`, `ClientInfo` | `AccessControlTest`, `SecurityConfigurationTest` |
+| A01 | Broken Access Control | Deny by default, role rules, owner-scoped queries (IDOR → 404), record DTOs against mass assignment, CSRF filter and guard, strict CORS, IP from trusted proxy only | `SecurityConfig`, `ApiCsrfProtection`, `OrderRepository`, `CookieRequestGuardFilter`, `ClientInfo` | `AccessControlTest`, `SecurityConfigurationTest` |
 | A02 | Security Misconfiguration | Header set, CSP, no stack traces, prod fail-fast, secrets from env, hidden management port, hardened containers, least-privilege DB | `SecurityConfig`, `StartupSecurityValidator`, `nginx/`, `docker-compose.yml`, `docker/mysql/` | `SecurityConfigurationTest` |
 | A03 | Software Supply Chain Failures | SHA-pinned actions, Trivy, CodeQL, SBOMs, Dependabot, patched Tomcat | `.github/` | CI |
 | A04 | Cryptographic Failures | Argon2id (OWASP parameters), RS256 3072-bit, HMAC-peppered OTPs, hashed refresh tokens, `SecureRandom`, constant-time compares | `PasswordConfig`, `JwtConfig`, `OtpService`, `Hmac` | `SecurityUnitTest`, `TokenAttackTest` |
@@ -518,13 +525,14 @@ application and a real MySQL 8.4 (Testcontainers). Nothing security-related is m
 | `AccessControlTest` | full role matrix, IDOR on orders, cart lines, sessions and addresses, mass assignment, business limits | `A01` |
 | `InjectionTest` | SQL injection in search, filters and sort, full-text operator abuse, stored XSS, fake reviews, malformed and oversized requests | `A05` `A10` |
 | `PaymentIntegrityTest` | client-set amounts, forged and swapped signatures, replay, declined payments, webhook forgery, last-item race, expiry and late payment refund, state machine, unpaid-order limit | `A08` `A06` |
-| `SecurityConfigurationTest` | headers, cookie flags, CSRF, CORS, JWKS without private material, OAuth2 misconfiguration | `A02` |
+| `SecurityConfigurationTest` | headers, cookie flags, CSRF on cookie endpoints and on the API, CORS, JWKS without private material, OAuth2 misconfiguration | `A02` |
 | `AuditTrailTest` | honeytoken alert and block, app account can't edit audit rows, hash chain catches a DBA edit, no secrets in events, user activity | `A09` |
+| `BreachedPasswordCheckerTest` | only a 5-character hash prefix leaves the server, padded answers, fail-open when the service is down | `A07` |
 | `SecurityUnitTest` | token bucket math, exponential lockout, IPv6 /64 bucketing, log sanitiser, constant-time HMAC, state machine, Argon2 parameters | all |
 
 ```bash
 cd shopeefy-server
-./mvnw verify            # needs Docker for Testcontainers; 64 tests
+./mvnw verify            # needs Docker for Testcontainers; 68 tests
 ```
 
 `scripts/smoke_test.py` then attacks the running Docker stack end to end (through nginx, with
@@ -602,6 +610,6 @@ mitigations).
 | Payments | any captured `payment_id` could mark any `order_id` as paid | signature + server-side amount/order match + row lock + idempotency |
 | Database | `root` account, schema changed by Hibernate at runtime | data-only app account, Flyway migrations under a separate account |
 | Secrets | database password and Razorpay keys committed | none in git; generated per environment |
-| CSRF / CORS | CSRF off, CORS allowed every method and header | CSRF guard on cookie endpoints, origin allowlist |
+| CSRF / CORS | CSRF off, CORS allowed every method and header | Spring CSRF filter on, extra guard on cookie endpoints, origin allowlist |
 | Logging | `System.out.println` of payment objects | hash-chained audit trail, alerts, sanitised logs |
-| Tests / CI | none | 64 attack tests, end-to-end attack run, Trivy, CodeQL, SBOMs |
+| Tests / CI | none | 68 attack tests, end-to-end attack run, Trivy, CodeQL, SBOMs |

@@ -13,6 +13,7 @@ import org.springframework.security.oauth2.server.resource.InvalidBearerTokenExc
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.stereotype.Component;
 
 import com.shopeefy.audit.AuditService;
@@ -51,6 +52,13 @@ public class RestSecurityHandlers implements AuthenticationEntryPoint, AccessDen
     @Override
     public void handle(HttpServletRequest request, HttpServletResponse response, AccessDeniedException ex)
             throws IOException {
+        if (ex instanceof CsrfException) {
+            // Spring's CSRF filter (ApiCsrfProtection): recorded and answered like CookieRequestGuardFilter.
+            audit.record(SecurityEventType.CSRF_REJECTED, Outcome.BLOCKED, null, null,
+                    "no bearer token and no X-Requested-With header", ClientInfo.from(request));
+            problems.write(request, response, HttpStatus.FORBIDDEN, "Cross-site request rejected.");
+            return;
+        }
         Long userId = null;
         if (SecurityContextHolder.getContext().getAuthentication() instanceof JwtAuthenticationToken token) {
             userId = CurrentUser.id(token.getToken());

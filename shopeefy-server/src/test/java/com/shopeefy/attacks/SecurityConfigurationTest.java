@@ -56,6 +56,24 @@ class SecurityConfigurationTest extends IntegrationTest {
     }
 
     @Test
+    @DisplayName("CSRF: Spring's CSRF filter refuses a state-changing API call with no bearer token and no custom header")
+    void csrfOnApi() {
+        long before = eventCount("CSRF_REJECTED");
+        Api form = api();
+        form.headers.remove("X-Requested-With");    // what an HTML form on another site can send
+        var forged = form.post("/api/orders", address());
+        assertThat(forged.status()).isEqualTo(403);
+        assertThat(forged.body().path("detail").asString()).isEqualTo("Cross-site request rejected.");
+        assertThat(forged.header("Set-Cookie")).as("no session or token cookie on a stateless API").isNull();
+        assertThat(eventCount("CSRF_REJECTED")).isEqualTo(before + 1);
+
+        assertThat(api().post("/api/orders", address()).status()).as("same-origin script, not signed in").isEqualTo(401);
+        Api script = signUp();
+        script.headers.remove("X-Requested-With");  // bearer-token clients (mobile, curl) need no header
+        assertThat(script.post("/api/users/me/sessions/revoke-others", null).status()).isEqualTo(204);
+    }
+
+    @Test
     @DisplayName("CORS: a foreign origin gets no Access-Control-Allow-Origin")
     void cors() {
         var preflight = api().send("OPTIONS", "/api/users/me", null, Map.of("Origin", "https://evil.example",

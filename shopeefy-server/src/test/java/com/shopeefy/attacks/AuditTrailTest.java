@@ -20,10 +20,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class AuditTrailTest extends IntegrationTest {
 
     @Test
-    @DisplayName("Honeytoken: touching /.env raises a CRITICAL alert email and blocks the client")
+    @DisplayName("Honeytoken: a scanner posting to /wp-login.php raises a CRITICAL alert email and is blocked")
     void honeytoken() {
         Api scanner = api();
-        assertThat(scanner.get("/.env").status()).isEqualTo(404);
+        scanner.headers.remove("X-Requested-With");   // scanners aren't our web app; CSRF must not hide them
+        assertThat(scanner.post("/wp-login.php", "log=admin&pwd=admin").status()).isEqualTo(404);
         assertThat(scanner.get("/api/products?pageSize=1").status()).isEqualTo(403);
         assertThat(mail.await(ALERT_EMAIL, "HONEYTOKEN_TRIGGERED")).isNotNull();
     }

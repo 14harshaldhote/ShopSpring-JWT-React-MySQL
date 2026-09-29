@@ -167,6 +167,9 @@ check("A07", "same error for a wrong password and an unknown email",
       s1 == s2 == 401 and e1.get("detail") == e2.get("detail"), (e1, e2))
 s, r, _ = Client().req("POST", "/auth/refresh", headers={"X-Requested-With": "", "Origin": "https://evil.example"})
 check("A01", "cross-site call to a cookie endpoint is blocked", s == 403, (s, r))
+s, r, _ = Client().req("POST", "/api/orders", {"firstName": "Evil"}, headers={"X-Requested-With": ""})
+check("A01", "a form-style API call (no bearer token, no custom header) is refused by Spring's CSRF filter",
+      s == 403 and isinstance(r, dict) and r.get("detail") == "Cross-site request rejected.", (s, r))
 
 # ---- Cart, order and payment integrity
 s, page, _ = c.req("GET", "/api/products?pageSize=1&category=women_dress")

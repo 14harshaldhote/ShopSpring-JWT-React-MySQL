@@ -126,8 +126,16 @@ public class SecurityConfig {
                         .accessDeniedHandler(restHandlers))
                 .exceptionHandling(e -> e.authenticationEntryPoint(restHandlers).accessDeniedHandler(restHandlers))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                // Keep CSRF enabled by default; only disable it for non-browser webhook callbacks.
-                .csrf(c -> c.ignoringRequestMatchers("/api/payments/webhook"))
+                // Spring's CSRF filter checks every state-changing request that has no bearer token for
+                // the header the web app always sends (ApiCsrfProtection). CookieRequestGuardFilter adds
+                // Origin and Fetch Metadata checks on the cookie endpoints. Exempt: the payment webhook
+                // (server to server, HMAC-signed), the mock payment page (it stands in for the provider's
+                // own site) and the honeytokens, so scanners are still recorded.  [OWASP A01:2025]
+                .csrf(c -> c
+                        .requireCsrfProtectionMatcher(ApiCsrfProtection.requiresProtection())
+                        .csrfTokenRepository(ApiCsrfProtection.noIssuedTokens())
+                        .ignoringRequestMatchers("/api/payments/webhook", "/dev/mock-gateway/**")
+                        .ignoringRequestMatchers(HONEYPOT_PATHS))
                 .requestCache(c -> c.disable())
                 .cors(c -> { })
                 .headers(h -> h

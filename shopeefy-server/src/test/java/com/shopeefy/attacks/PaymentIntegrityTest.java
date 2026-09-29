@@ -126,12 +126,14 @@ class PaymentIntegrityTest extends IntegrationTest {
                 "id", paid.get("paymentId"), "order_id", paid.get("providerOrderId"), "amount", amount,
                 "currency", "INR", "status", "captured")))));
 
-        var spoofed = api().send("POST", "/api/payments/webhook", body.getBytes(StandardCharsets.UTF_8),
+        Api provider = api();
+        provider.headers.remove("X-Requested-With");   // a server-to-server call, like the real provider's
+        var spoofed = provider.send("POST", "/api/payments/webhook", body.getBytes(StandardCharsets.UTF_8),
                 Map.of("Content-Type", "application/json", "X-Razorpay-Signature", "0".repeat(64)));
         assertThat(spoofed.status()).isEqualTo(400);
         assertThat(eventCount("WEBHOOK_SIGNATURE_INVALID")).isPositive();
 
-        var genuine = api().send("POST", "/api/payments/webhook", body.getBytes(StandardCharsets.UTF_8),
+        var genuine = provider.send("POST", "/api/payments/webhook", body.getBytes(StandardCharsets.UTF_8),
                 Map.of("Content-Type", "application/json", "X-Razorpay-Signature", Hmac.sha256Hex(MOCK_SECRET, body)));
         assertThat(genuine.status()).isEqualTo(200);
         assertThat(buyer.get("/api/orders/" + orderId).body().path("orderStatus").asString()).isEqualTo("PLACED");

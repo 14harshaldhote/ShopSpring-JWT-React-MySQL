@@ -9,8 +9,9 @@ const sessionListeners = new Set();
 export const api = axios.create({
   baseURL: '',
   timeout: 20000,
-  // [OWASP A01:2025] The backend refuses cookie (/auth) calls without this header: HTML forms and
-  // other sites can't set it, so it blocks cross-site request forgery on the refresh cookie.
+  // [OWASP A01:2025] The backend refuses cookie (/auth) calls, and any state-changing call without a
+  // bearer token, that lack this header: HTML forms and other sites can't set it, so it blocks
+  // cross-site request forgery.
   headers: { 'X-Requested-With': 'XMLHttpRequest' },
 });
 

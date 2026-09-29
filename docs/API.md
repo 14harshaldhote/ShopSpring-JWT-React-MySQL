@@ -12,7 +12,8 @@ port 8080, and in Docker nginx does the same. The frontend therefore calls relat
   `Secure`, `SameSite=Strict` cookie named `ss_refresh` scoped to `Path=/auth`. The browser sends it
   automatically; JavaScript cannot read it. Calls to `/auth/*` must use `withCredentials: true`.
 * Every state-changing `/auth/*` call must send the header `X-Requested-With: XMLHttpRequest`
-  (CSRF defence for the cookie endpoints). The server rejects cookie calls without it.
+  (CSRF defence). The server rejects cookie calls without it, and any state-changing call that
+  has neither it nor a bearer token.
 * Rate-limited responses are `429` with a `Retry-After` header (seconds) and
   `X-RateLimit-Remaining`.
 
