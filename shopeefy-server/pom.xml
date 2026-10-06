@@ -26,7 +26,7 @@
              through unbounded number parsing). Pinned to the fixed patch releases.     [OWASP A03:2025, A10:2025] -->
         <jackson-bom.version>3.1.7</jackson-bom.version>
         <jackson-2-bom.version>2.21.7</jackson-2-bom.version>
-        <bucket4j.version>8.20.0</bucket4j.version>
+        <bucket4j.version>8.21.0</bucket4j.version>
         <springdoc.version>3.1.1</springdoc.version>
         <testcontainers.version>2.0.5</testcontainers.version>
     </properties>
