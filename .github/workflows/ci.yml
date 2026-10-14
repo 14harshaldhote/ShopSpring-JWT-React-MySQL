@@ -44,7 +44,7 @@ jobs:
         run: ./mvnw -B -ntp org.cyclonedx:cyclonedx-maven-plugin:2.9.3:makeBom -DoutputFormat=json -DoutputName=sbom-api
       - name: Upload test reports and SBOM
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: api-reports
           path: |
@@ -91,7 +91,7 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
       - name: CycloneDX SBOM
         run: npm sbom --omit=dev --sbom-format cyclonedx > sbom-web.json
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: web-sbom
           path: shopeefy-vite/sbom-web.json
